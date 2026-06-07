@@ -1,3 +1,4 @@
+import { useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '@/store/gameStore';
 import ProgressRing from '@/components/ProgressRing';
@@ -7,6 +8,7 @@ import {
   Play, RotateCcw, TrendingUp, TrendingDown, Activity,
   ShoppingCart, ClipboardCheck, Warehouse, UtensilsCrossed,
   Truck, AlertTriangle, BarChart3, Trophy, Skull,
+  ChevronDown, ChevronRight, Swords, Flag, Zap,
 } from 'lucide-react';
 
 const PHASE_CONFIG: { phase: Phase; label: string; icon: React.ReactNode; path: string }[] = [
@@ -114,10 +116,13 @@ function LandingPage() {
 
 function DashboardPage() {
   const navigate = useNavigate();
+  const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
+
   const {
     currentDay, totalDays, funds, satisfaction, wasteRate,
     onTimeRate, profit, currentPhase, completedPhases,
     activeEvents, daySummaries, gameOver, gameWon, resetGame,
+    challengeMode, multiWarehouseUnlocked, startChallenge,
   } = useGameStore();
 
   const currentPhaseConfig = PHASE_CONFIG.find(p => p.phase === currentPhase);
@@ -127,8 +132,38 @@ function DashboardPage() {
     resetGame();
   };
 
+  const toggleExpand = (day: number) => {
+    setExpandedDays(prev => {
+      const next = new Set(prev);
+      if (next.has(day)) next.delete(day);
+      else next.add(day);
+      return next;
+    });
+  };
+
+  const handleStartChallenge = () => {
+    startChallenge();
+    navigate('/procurement');
+  };
+
   return (
     <div className="min-h-screen p-6 space-y-6 animate-fade-in" style={{ background: '#0f0f1a' }}>
+      {challengeMode && (
+        <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-xl px-5 py-3 animate-slide-in">
+          <div className="flex items-center gap-3">
+            <Swords size={20} className="text-amber-400" />
+            <span className="text-amber-300 font-bold text-sm">多仓配送挑战进行中</span>
+          </div>
+          <button
+            onClick={() => navigate('/challenge')}
+            className="btn-secondary text-xs px-4 py-1.5 flex items-center gap-2"
+          >
+            <Flag size={14} />
+            挑战总览
+          </button>
+        </div>
+      )}
+
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-100">
@@ -136,12 +171,14 @@ function DashboardPage() {
           </h1>
           <div className="flex items-center gap-3 mt-1">
             <span className="text-sm text-slate-500">
-              当前阶段：
+              {challengeMode ? `挑战日 ${currentDay} / ${totalDays}` : '当前阶段：'}
             </span>
-            <span className="inline-flex items-center gap-1.5 text-sm text-amber-400 font-medium">
-              {currentPhaseConfig?.icon}
-              {currentPhaseConfig?.label}
-            </span>
+            {!challengeMode && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-amber-400 font-medium">
+                {currentPhaseConfig?.icon}
+                {currentPhaseConfig?.label}
+              </span>
+            )}
             {activeEvents.length > 0 && (
               <span className="inline-flex items-center gap-1 text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
                 <AlertTriangle size={12} />
@@ -256,6 +293,16 @@ function DashboardPage() {
         <div className="card animate-slide-in" style={{ animationDelay: '0.3s' }}>
           <h3 className="text-sm font-medium text-slate-300 mb-4">快速操作</h3>
           <div className="space-y-2">
+            {multiWarehouseUnlocked && !challengeMode && (
+              <button
+                onClick={handleStartChallenge}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 transition-all duration-200 hover:bg-amber-500/15 animate-slide-in"
+              >
+                <Zap size={16} className="text-amber-400" />
+                <span className="text-sm font-medium">进入多仓配送挑战</span>
+                <span className="ml-auto text-xs text-amber-400/70">新模式</span>
+              </button>
+            )}
             {PHASE_CONFIG.map((config, idx) => {
               const isCompleted = completedPhases.includes(config.phase);
               const isCurrent = currentPhase === config.phase;
@@ -296,6 +343,7 @@ function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#2a2a45]">
+                  <th className="text-left text-slate-500 font-medium py-2 px-3 w-8"></th>
                   <th className="text-left text-slate-500 font-medium py-2 px-3">天数</th>
                   <th className="text-right text-slate-500 font-medium py-2 px-3">满意度</th>
                   <th className="text-right text-slate-500 font-medium py-2 px-3">损耗率</th>
@@ -306,29 +354,102 @@ function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {daySummaries.map((s) => (
-                  <tr key={s.day} className="border-b border-[#2a2a45]/50 hover:bg-[#2a2a45]/30 transition-colors">
-                    <td className="py-2 px-3 font-mono-data text-amber-400">第{s.day}天</td>
-                    <td className={`py-2 px-3 text-right font-mono-data ${s.satisfaction >= 70 ? 'text-emerald-400' : s.satisfaction >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
-                      {s.satisfaction}%
-                    </td>
-                    <td className={`py-2 px-3 text-right font-mono-data ${s.wasteRate <= 20 ? 'text-emerald-400' : s.wasteRate <= 40 ? 'text-amber-400' : 'text-red-400'}`}>
-                      {s.wasteRate}%
-                    </td>
-                    <td className={`py-2 px-3 text-right font-mono-data ${s.onTimeRate >= 70 ? 'text-emerald-400' : s.onTimeRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
-                      {s.onTimeRate}%
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono-data text-slate-300">
-                      ¥{s.revenue.toLocaleString()}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono-data text-slate-400">
-                      ¥{s.cost.toLocaleString()}
-                    </td>
-                    <td className={`py-2 px-3 text-right font-mono-data font-medium ${s.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {s.profit >= 0 ? '+' : ''}¥{s.profit.toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
+                {daySummaries.map((s) => {
+                  const isExpanded = expandedDays.has(s.day);
+                  return (
+                    <Fragment key={s.day}>
+                      <tr
+                        className="border-b border-[#2a2a45]/50 hover:bg-[#2a2a45]/30 transition-colors cursor-pointer"
+                        onClick={() => toggleExpand(s.day)}
+                      >
+                        <td className="py-2 px-3 text-slate-500">
+                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </td>
+                        <td className="py-2 px-3 font-mono-data text-amber-400">第{s.day}天</td>
+                        <td className={`py-2 px-3 text-right font-mono-data ${s.satisfaction >= 70 ? 'text-emerald-400' : s.satisfaction >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                          {s.satisfaction}%
+                        </td>
+                        <td className={`py-2 px-3 text-right font-mono-data ${s.wasteRate <= 20 ? 'text-emerald-400' : s.wasteRate <= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                          {s.wasteRate}%
+                        </td>
+                        <td className={`py-2 px-3 text-right font-mono-data ${s.onTimeRate >= 70 ? 'text-emerald-400' : s.onTimeRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                          {s.onTimeRate}%
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono-data text-slate-300">
+                          ¥{s.revenue.toLocaleString()}
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono-data text-slate-400">
+                          ¥{s.cost.toLocaleString()}
+                        </td>
+                        <td className={`py-2 px-3 text-right font-mono-data font-medium ${s.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {s.profit >= 0 ? '+' : ''}¥{s.profit.toLocaleString()}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-[#2a2a45]/30">
+                          <td colSpan={8} className="px-6 py-3 bg-[#161628]">
+                            <div className="space-y-3">
+                              <div>
+                                <span className="text-xs text-slate-500">成本明细：</span>
+                                <span className="text-xs font-mono-data text-slate-300 ml-1">
+                                  采购 ¥{s.costBreakdown.procurement.toLocaleString()}
+                                </span>
+                                <span className="text-slate-600 mx-1">/</span>
+                                <span className="text-xs font-mono-data text-slate-300">
+                                  排产 ¥{s.costBreakdown.menu.toLocaleString()}
+                                </span>
+                                <span className="text-slate-600 mx-1">/</span>
+                                <span className="text-xs font-mono-data text-slate-300">
+                                  事件 ¥{s.costBreakdown.events.toLocaleString()}
+                                </span>
+                                <span className="text-slate-600 mx-1">/</span>
+                                <span className="text-xs font-mono-data text-slate-300">
+                                  租车 ¥{s.costBreakdown.rental.toLocaleString()}
+                                </span>
+                              </div>
+
+                              {s.deliveryResults.length > 0 && (
+                                <div>
+                                  <span className="text-xs text-slate-500">配送结果：</span>
+                                  <div className="flex flex-wrap gap-2 mt-1">
+                                    {s.deliveryResults.map(r => (
+                                      <span
+                                        key={r.customerId}
+                                        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+                                          r.onTime
+                                            ? 'bg-emerald-500/10 text-emerald-400'
+                                            : 'bg-red-500/10 text-red-400'
+                                        }`}
+                                      >
+                                        {r.customerName}
+                                        {r.onTime ? ' 准点' : ' 延误'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex items-center gap-4">
+                                <span className="text-xs text-slate-500">
+                                  满意度变化：
+                                  <span className={`font-mono-data ml-1 ${s.satisfactionChange <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {s.satisfactionChange <= 0 ? '' : '+'}{s.satisfactionChange}%
+                                  </span>
+                                </span>
+                                {s.onTimePenalty > 0 && (
+                                  <span className="text-xs text-slate-500">
+                                    准点惩罚：
+                                    <span className="font-mono-data text-red-400 ml-1">{s.onTimePenalty}</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -338,20 +459,33 @@ function DashboardPage() {
       {gameOver && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
           <div className="card max-w-md w-full mx-4 text-center p-8 animate-slide-in border-2"
-            style={{ borderColor: gameWon ? '#10b981' : '#ef4444' }}
+            style={{ borderColor: gameWon ? (challengeMode ? '#f59e0b' : '#10b981') : '#ef4444' }}
           >
             {gameWon ? (
-              <Trophy size={56} className="mx-auto text-emerald-400 mb-4" />
+              challengeMode ? (
+                <Swords size={56} className="mx-auto text-amber-400 mb-4" />
+              ) : (
+                <Trophy size={56} className="mx-auto text-emerald-400 mb-4" />
+              )
             ) : (
               <Skull size={56} className="mx-auto text-red-400 mb-4" />
             )}
 
-            <h2 className={`text-2xl font-bold mb-2 ${gameWon ? 'text-emerald-400' : 'text-red-400'}`}>
-              {gameWon ? '调度成功' : '调度失败'}
+            <h2 className={`text-2xl font-bold mb-2 ${
+              gameWon
+                ? challengeMode ? 'text-amber-400' : 'text-emerald-400'
+                : 'text-red-400'
+            }`}>
+              {gameWon
+                ? challengeMode ? '挑战成功' : '调度成功'
+                : '调度失败'
+              }
             </h2>
             <p className="text-slate-400 text-sm mb-6">
               {gameWon
-                ? `你在 ${totalDays} 天内成功维持了供应链运转！最终满意度 ${satisfaction}%，准时率 ${onTimeRate}%。`
+                ? challengeMode
+                  ? `你在多仓配送挑战中成功统筹了全部仓库！最终满意度 ${satisfaction}%，准时率 ${onTimeRate}%。`
+                  : `你在 ${totalDays} 天内成功维持了供应链运转！最终满意度 ${satisfaction}%，准时率 ${onTimeRate}%。`
                 : '供应链运转不畅，未能达到基本运营指标。重新调整策略再试一次吧。'
               }
             </p>

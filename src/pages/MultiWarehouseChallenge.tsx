@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '@/store/gameStore';
 import { cn } from '@/lib/utils';
@@ -6,7 +6,8 @@ import { CHALLENGE_DISTANCE_MATRIX } from '@/data/gameData';
 import type { StorageType, WarehouseSlot, Vehicle, Ingredient, DeliveryOrder, Customer } from '@/types';
 import {
   Warehouse, Thermometer, Snowflake, Sun, Truck, Package,
-  MapPin, AlertTriangle, ArrowLeft, Building2, RouteIcon, TrendingUp
+  MapPin, AlertTriangle, ArrowLeft, Building2, RouteIcon, TrendingUp,
+  ArrowLeftRight, ChevronDown, X
 } from 'lucide-react';
 
 interface WarehouseData {
@@ -57,6 +58,7 @@ export default function MultiWarehouseChallenge() {
   const {
     currentDay, totalDays, funds, satisfaction, onTimeRate,
     warehouseSlots, vehicles, ingredients, customers, orders, challengeMode,
+    transferIngredient, transferCostToday,
   } = useGameStore();
 
   const warehouseData: WarehouseData[] = useMemo(() => {
@@ -157,6 +159,14 @@ export default function MultiWarehouseChallenge() {
           <WarehouseColumn key={wh.key} warehouse={wh} />
         ))}
       </div>
+
+      <CrossWarehouseTransfer
+        ingredients={ingredients}
+        warehouseSlots={warehouseSlots}
+        transferIngredient={transferIngredient}
+        transferCostToday={transferCostToday}
+        funds={funds}
+      />
 
       <CrossWarehouseAnalysis distanceComparison={distanceComparison} />
 
@@ -455,6 +465,205 @@ function CrossWarehouseAnalysis({ distanceComparison }: { distanceComparison: Di
           <span>跨仓配送距离 ×2，准点率 -15%</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+const SLOT_WAREHOUSE_MAP: Record<string, string> = {
+  cw1: '城东中央仓', cw2: '城东中央仓', cw3: '城东中央仓',
+  cw4: '城西冷链仓', cw5: '城西冷链仓', cw6: '城西冷链仓',
+};
+
+interface CrossWarehouseTransferProps {
+  ingredients: Ingredient[];
+  warehouseSlots: WarehouseSlot[];
+  transferIngredient: (ingredientId: string, fromSlotId: string, toSlotId: string) => void;
+  transferCostToday: number;
+  funds: number;
+}
+
+function CrossWarehouseTransfer({
+  ingredients, warehouseSlots, transferIngredient, transferCostToday, funds,
+}: CrossWarehouseTransferProps) {
+  const [activeTransferId, setActiveTransferId] = useState<string | null>(null);
+
+  const slottedIngredients = useMemo(() => {
+    return ingredients.filter(i => i.slotId);
+  }, [ingredients]);
+
+  const eastIngredients = useMemo(() => {
+    return slottedIngredients.filter(i => {
+      const wh = i.slotId ? SLOT_WAREHOUSE_MAP[i.slotId] : null;
+      return wh === '城东中央仓';
+    });
+  }, [slottedIngredients]);
+
+  const westIngredients = useMemo(() => {
+    return slottedIngredients.filter(i => {
+      const wh = i.slotId ? SLOT_WAREHOUSE_MAP[i.slotId] : null;
+      return wh === '城西冷链仓';
+    });
+  }, [slottedIngredients]);
+
+  const getTargetSlots = (fromSlotId: string): WarehouseSlot[] => {
+    const fromWh = SLOT_WAREHOUSE_MAP[fromSlotId];
+    const targetWh = fromWh === '城东中央仓' ? '城西冷链仓' : '城东中央仓';
+    const targetSlotIds = fromWh === '城东中央仓'
+      ? ['cw4', 'cw5', 'cw6']
+      : ['cw1', 'cw2', 'cw3'];
+    return warehouseSlots.filter(s => targetSlotIds.includes(s.id));
+  };
+
+  const handleTransfer = (ingredient: Ingredient, targetSlotId: string) => {
+    if (!ingredient.slotId) return;
+    const fromWh = SLOT_WAREHOUSE_MAP[ingredient.slotId];
+    const toWh = SLOT_WAREHOUSE_MAP[targetSlotId];
+    const isCross = fromWh !== toWh;
+    if (isCross && funds < 200) return;
+    transferIngredient(ingredient.id, ingredient.slotId, targetSlotId);
+    setActiveTransferId(null);
+  };
+
+  const getSlotLabel = (slotId: string) => {
+    const slot = warehouseSlots.find(s => s.id === slotId);
+    return slot ? slot.label.replace(/城东中央仓-|城西冷链仓-/, '') : slotId;
+  };
+
+  const getSlotWarehouse = (slotId: string) => {
+    return SLOT_WAREHOUSE_MAP[slotId] ?? '未知';
+  };
+
+  const renderIngredientRow = (ing: Ingredient, groupKey: 'east' | 'west') => {
+    const isEast = groupKey === 'east';
+    const accentText = isEast ? 'text-amber-400' : 'text-cyan-400';
+    const accentBorder = isEast ? 'border-amber-500/30' : 'border-cyan-500/30';
+    const accentBg = isEast ? 'bg-amber-500/10' : 'bg-cyan-500/10';
+    const isActive = activeTransferId === ing.id;
+    const targetSlots = ing.slotId ? getTargetSlots(ing.slotId) : [];
+
+    return (
+      <div key={ing.id} className="space-y-1">
+        <div className="flex items-center justify-between bg-black/20 rounded px-2.5 py-2 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-200">{ing.name}</span>
+            <span className="text-slate-500">×{ing.quantity}</span>
+            <span className={cn('text-xs px-1.5 py-0.5 rounded border', accentBg, accentText, accentBorder)}>
+              {ing.slotId ? getSlotWarehouse(ing.slotId) : ''}
+            </span>
+            <span className="text-xs text-slate-500">
+              {ing.slotId ? getSlotLabel(ing.slotId) : ''}
+            </span>
+          </div>
+          <button
+            onClick={() => setActiveTransferId(isActive ? null : ing.id)}
+            className={cn(
+              'flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors',
+              isActive
+                ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                : 'bg-[#2a2a45] text-slate-300 hover:bg-[#3a3a55] border border-[#3a3a55]'
+            )}
+          >
+            {isActive ? <X size={12} /> : <ArrowLeftRight size={12} />}
+            {isActive ? '取消' : '调拨'}
+          </button>
+        </div>
+
+        {isActive && (
+          <div className="bg-[#1a1a2e] border border-[#2a2a45] rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">选择目标仓位</span>
+              <span className="text-xs text-red-400 font-medium">
+                跨仓调拨费 ¥200
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {targetSlots.map(slot => {
+                const used = slot.itemIds.length;
+                const isFull = used >= slot.capacity;
+                const zoneStyle = ZONE_STYLES[slot.zone];
+                return (
+                  <button
+                    key={slot.id}
+                    disabled={isFull}
+                    onClick={() => handleTransfer(ing, slot.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border transition-colors',
+                      isFull
+                        ? 'opacity-40 cursor-not-allowed border-[#2a2a45] text-slate-500'
+                        : 'border-[#3a3a55] hover:border-amber-500/50 hover:bg-amber-500/5 text-slate-200'
+                    )}
+                  >
+                    {zoneStyle.icon}
+                    <span>{getSlotLabel(slot.id)}</span>
+                    <span className={cn('font-mono-data', isFull ? 'text-red-400' : 'text-slate-400')}>
+                      {used}/{slot.capacity}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {funds < 200 && (
+              <div className="flex items-center gap-1.5 text-xs text-red-400">
+                <AlertTriangle size={12} />
+                <span>资金不足，无法支付跨仓调拨费</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <ArrowLeftRight size={18} className="text-amber-400" />
+          <h2 className="text-lg font-bold text-slate-100">跨仓调拨</h2>
+        </div>
+        {transferCostToday > 0 && (
+          <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-1.5">
+            <span className="text-xs text-slate-500">今日调拨费用</span>
+            <span className="font-mono-data font-bold text-red-400">¥{transferCostToday.toLocaleString()}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Warehouse size={14} className="text-amber-400" />
+            <h3 className="text-sm font-semibold text-amber-400">城东中央仓</h3>
+            <span className="font-mono-data text-xs text-slate-500">{eastIngredients.length}种</span>
+          </div>
+          {eastIngredients.length === 0 && (
+            <div className="text-xs text-slate-500 py-2 text-center">暂无入库原料</div>
+          )}
+          <div className="space-y-1.5">
+            {eastIngredients.map(ing => renderIngredientRow(ing, 'east'))}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Warehouse size={14} className="text-cyan-400" />
+            <h3 className="text-sm font-semibold text-cyan-400">城西冷链仓</h3>
+            <span className="font-mono-data text-xs text-slate-500">{westIngredients.length}种</span>
+          </div>
+          {westIngredients.length === 0 && (
+            <div className="text-xs text-slate-500 py-2 text-center">暂无入库原料</div>
+          )}
+          <div className="space-y-1.5">
+            {westIngredients.map(ing => renderIngredientRow(ing, 'west'))}
+          </div>
+        </div>
+      </div>
+
+      {slottedIngredients.length === 0 && (
+        <div className="text-center py-6 text-sm text-slate-500">
+          暂无入库原料可调拨，请先将原料分配至仓库仓位
+        </div>
+      )}
     </div>
   );
 }

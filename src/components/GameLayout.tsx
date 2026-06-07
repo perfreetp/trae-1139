@@ -3,7 +3,7 @@ import { useGameStore } from '@/store/gameStore';
 import type { Phase } from '@/types';
 import {
   ShoppingCart, ClipboardCheck, Warehouse, UtensilsCrossed,
-  Truck, AlertTriangle, BarChart3, Home
+  Truck, AlertTriangle, BarChart3, Home, Swords
 } from 'lucide-react';
 
 const PHASE_CONFIG: { phase: Phase; label: string; icon: React.ReactNode; path: string }[] = [
@@ -19,7 +19,7 @@ const PHASE_CONFIG: { phase: Phase; label: string; icon: React.ReactNode; path: 
 export default function GameLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentDay, totalDays, funds, satisfaction, currentPhase, completedPhases, started, activeEvents } = useGameStore();
+  const { currentDay, totalDays, funds, satisfaction, currentPhase, completedPhases, started, activeEvents, challengeMode } = useGameStore();
 
   if (!started) return <>{children}</>;
 
@@ -39,7 +39,7 @@ export default function GameLayout({ children }: { children: React.ReactNode }) 
         <div className="p-4 border-b border-[#2a2a45]">
           <div className="text-xs text-slate-500 mb-1">当前进度</div>
           <div className="font-mono-data text-amber-400 text-lg font-bold">
-            第 {currentDay} / {totalDays} 天
+            {challengeMode ? '挑战' : '第'} {currentDay} / {totalDays} 天
           </div>
           <div className="mt-2 w-full bg-[#2a2a45] rounded-full h-1.5">
             <div
@@ -48,6 +48,18 @@ export default function GameLayout({ children }: { children: React.ReactNode }) 
             />
           </div>
         </div>
+
+        {challengeMode && (
+          <div className="px-3 pt-3">
+            <button
+              onClick={() => navigate('/challenge')}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm font-medium hover:bg-amber-500/20 transition-colors"
+            >
+              <Swords size={16} />
+              挑战总览
+            </button>
+          </div>
+        )}
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {PHASE_CONFIG.map((config, idx) => {
@@ -113,6 +125,12 @@ export default function GameLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {challengeMode && (
+              <span className="flex items-center gap-1.5 text-xs font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30">
+                <Swords size={12} />
+                多仓挑战
+              </span>
+            )}
             <div className="text-xs text-slate-500">
               {PHASE_CONFIG.find(p => p.phase === currentPhase)?.label || '总览'}
             </div>
