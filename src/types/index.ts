@@ -92,6 +92,7 @@ export interface Customer {
   satisfaction: number;
   location: string;
   dailyOrderSize: number;
+  consecutiveDelays: number;
 }
 
 export interface EventOption {
@@ -112,6 +113,17 @@ export interface EmergencyEvent {
   selectedOption?: number;
 }
 
+export interface DeliveryResult {
+  customerId: string;
+  customerName: string;
+  onTime: boolean;
+  delayReason?: string;
+  crossWarehouse: boolean;
+  distance: number;
+  vehicleType: VehicleType;
+  isRented: boolean;
+}
+
 export interface DaySummary {
   day: number;
   satisfaction: number;
@@ -120,6 +132,10 @@ export interface DaySummary {
   profit: number;
   revenue: number;
   cost: number;
+  costBreakdown: CostBreakdown;
+  deliveryResults: DeliveryResult[];
+  satisfactionChange: number;
+  onTimePenalty: number;
 }
 
 export interface CostBreakdown {
@@ -127,6 +143,19 @@ export interface CostBreakdown {
   menu: number;
   events: number;
   rental: number;
+}
+
+export interface SettlementSnapshot {
+  revenue: number;
+  cost: number;
+  costBreakdown: CostBreakdown;
+  profit: number;
+  satisfaction: number;
+  satisfactionChange: number;
+  onTimeRate: number;
+  onTimePenalty: number;
+  wasteRate: number;
+  deliveryResults: DeliveryResult[];
 }
 
 export interface GameState {
@@ -161,6 +190,8 @@ export interface GameState {
   rentedVehicles: Vehicle[];
   dayCostBreakdown: CostBreakdown;
   brokenVehicleIds: string[];
+  lastSettlement: SettlementSnapshot | null;
+  transferCostToday: number;
 }
 
 export interface MultiWarehouseConfig {

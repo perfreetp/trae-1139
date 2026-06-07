@@ -27,11 +27,11 @@ const RECIPES: Recipe[] = [
 ];
 
 const CUSTOMERS: Customer[] = [
-  { id: 'c1', name: '阳光小学', type: 'school', satisfaction: 80, location: '城东区-学府路12号', dailyOrderSize: 300 },
-  { id: 'c2', name: '育才中学', type: 'school', satisfaction: 75, location: '城东区-育才大道88号', dailyOrderSize: 400 },
-  { id: 'c3', name: '市中心医院', type: 'hospital', satisfaction: 85, location: '城中区-健康路56号', dailyOrderSize: 250 },
-  { id: 'c4', name: '第一人民医院', type: 'hospital', satisfaction: 80, location: '城西区-医疗街33号', dailyOrderSize: 200 },
-  { id: 'c5', name: '科技园区食堂', type: 'enterprise', satisfaction: 70, location: '高新区-创新大道100号', dailyOrderSize: 500 },
+  { id: 'c1', name: '阳光小学', type: 'school', satisfaction: 80, location: '城东区-学府路12号', dailyOrderSize: 300, consecutiveDelays: 0 },
+  { id: 'c2', name: '育才中学', type: 'school', satisfaction: 75, location: '城东区-育才大道88号', dailyOrderSize: 400, consecutiveDelays: 0 },
+  { id: 'c3', name: '市中心医院', type: 'hospital', satisfaction: 85, location: '城中区-健康路56号', dailyOrderSize: 250, consecutiveDelays: 0 },
+  { id: 'c4', name: '第一人民医院', type: 'hospital', satisfaction: 80, location: '城西区-医疗街33号', dailyOrderSize: 200, consecutiveDelays: 0 },
+  { id: 'c5', name: '科技园区食堂', type: 'enterprise', satisfaction: 70, location: '高新区-创新大道100号', dailyOrderSize: 500, consecutiveDelays: 0 },
 ];
 
 const VEHICLES: Vehicle[] = [
@@ -204,6 +204,8 @@ export function createInitialState() {
     rentedVehicles: [],
     dayCostBreakdown: { procurement: 0, menu: 0, events: 0, rental: 0 },
     brokenVehicleIds: [],
+    lastSettlement: null,
+    transferCostToday: 0,
   };
 }
 
@@ -271,13 +273,13 @@ const CHALLENGE_VEHICLES: Vehicle[] = [
 ];
 
 const CHALLENGE_CUSTOMERS: Customer[] = [
-  { id: 'cc1', name: '阳光小学', type: 'school', satisfaction: 80, location: '城东区-学府路12号', dailyOrderSize: 300 },
-  { id: 'cc2', name: '育才中学', type: 'school', satisfaction: 75, location: '城东区-育才大道88号', dailyOrderSize: 400 },
-  { id: 'cc3', name: '启明小学', type: 'school', satisfaction: 78, location: '城西区-文教路22号', dailyOrderSize: 250 },
-  { id: 'cc4', name: '市中心医院', type: 'hospital', satisfaction: 85, location: '城中区-健康路56号', dailyOrderSize: 250 },
-  { id: 'cc5', name: '第一人民医院', type: 'hospital', satisfaction: 80, location: '城西区-医疗街33号', dailyOrderSize: 200 },
-  { id: 'cc6', name: '科技园区食堂', type: 'enterprise', satisfaction: 70, location: '高新区-创新大道100号', dailyOrderSize: 500 },
-  { id: 'cc7', name: '远航集团食堂', type: 'enterprise', satisfaction: 65, location: '远郊区-临港大道1号', dailyOrderSize: 350 },
+  { id: 'cc1', name: '阳光小学', type: 'school', satisfaction: 80, location: '城东区-学府路12号', dailyOrderSize: 300, consecutiveDelays: 0 },
+  { id: 'cc2', name: '育才中学', type: 'school', satisfaction: 75, location: '城东区-育才大道88号', dailyOrderSize: 400, consecutiveDelays: 0 },
+  { id: 'cc3', name: '启明小学', type: 'school', satisfaction: 78, location: '城西区-文教路22号', dailyOrderSize: 250, consecutiveDelays: 0 },
+  { id: 'cc4', name: '市中心医院', type: 'hospital', satisfaction: 85, location: '城中区-健康路56号', dailyOrderSize: 250, consecutiveDelays: 0 },
+  { id: 'cc5', name: '第一人民医院', type: 'hospital', satisfaction: 80, location: '城西区-医疗街33号', dailyOrderSize: 200, consecutiveDelays: 0 },
+  { id: 'cc6', name: '科技园区食堂', type: 'enterprise', satisfaction: 70, location: '高新区-创新大道100号', dailyOrderSize: 500, consecutiveDelays: 0 },
+  { id: 'cc7', name: '远航集团食堂', type: 'enterprise', satisfaction: 65, location: '远郊区-临港大道1号', dailyOrderSize: 350, consecutiveDelays: 0 },
 ];
 
 const CHALLENGE_DISTANCE_MATRIX: Record<string, Record<string, number>> = {
@@ -410,6 +412,8 @@ export function createChallengeState(): GameState {
     rentedVehicles: [],
     dayCostBreakdown: { procurement: 0, menu: 0, events: 0, rental: 0 },
     brokenVehicleIds: [],
+    lastSettlement: null,
+    transferCostToday: 0,
   };
 }
 
