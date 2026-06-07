@@ -70,6 +70,7 @@ export interface Vehicle {
   available: boolean;
   route: string[];
   assignedOrderIds: string[];
+  originWarehouse?: string;
 }
 
 export interface DeliveryOrder {
@@ -80,6 +81,8 @@ export interface DeliveryOrder {
   portions: number;
   status: OrderStatus;
   deadline: number;
+  needsColdChain: boolean;
+  originWarehouse?: string;
 }
 
 export interface Customer {
@@ -119,6 +122,13 @@ export interface DaySummary {
   cost: number;
 }
 
+export interface CostBreakdown {
+  procurement: number;
+  menu: number;
+  events: number;
+  rental: number;
+}
+
 export interface GameState {
   started: boolean;
   gameOver: boolean;
@@ -145,4 +155,17 @@ export interface GameState {
   daySummaries: DaySummary[];
   todayRevenue: number;
   todayCost: number;
+  challengeMode: boolean;
+  satisfactionChangeToday: number;
+  onTimePenaltyToday: number;
+  rentedVehicles: Vehicle[];
+  dayCostBreakdown: CostBreakdown;
+  brokenVehicleIds: string[];
+}
+
+export interface MultiWarehouseConfig {
+  warehouses: WarehouseSlot[];
+  vehicles: Vehicle[];
+  customers: Customer[];
+  distanceMatrix: Record<string, Record<string, number>>;
 }

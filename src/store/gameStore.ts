@@ -1,6 +1,10 @@
 import { create } from 'zustand';
-import type { GameState, Phase, Ingredient, DeliveryOrder, Vehicle, EmergencyEvent, DaySummary } from '@/types';
-import { createInitialState, generateIngredients, generateEmergencyEvents } from '@/data/gameData';
+import type { GameState, Phase, DeliveryOrder, Vehicle, EmergencyEvent, DaySummary, CostBreakdown } from '@/types';
+import { createInitialState, generateIngredients, generateEmergencyEvents, createChallengeState } from '@/data/gameData';
+
+const COLD_CHAIN_CATEGORIES = ['egg', 'tomato', 'vegetable', 'chicken', 'pork', 'fish', 'seafood', 'tofu'];
+
+const EMPTY_COST_BREAKDOWN: CostBreakdown = { procurement: 0, menu: 0, events: 0, rental: 0 };
 
 type GameActions = {
   startGame: () => void;
@@ -29,6 +33,8 @@ type GameActions = {
   adjustOnTimeRate: (amount: number) => void;
   setOrders: (orders: DeliveryOrder[]) => void;
   updateVehicle: (vehicleId: string, updates: Partial<Vehicle>) => void;
+  rentVehicle: (vehicleType: 'cold_chain' | 'normal') => Vehicle;
+  startChallenge: () => void;
 };
 
 const PHASE_ORDER: Phase[] = ['procurement', 'inspection', 'warehouse', 'menu', 'loading', 'emergency', 'settlement'];
@@ -59,6 +65,12 @@ const initialState: GameState = {
   daySummaries: [],
   todayRevenue: 0,
   todayCost: 0,
+  challengeMode: false,
+  satisfactionChangeToday: 0,
+  onTimePenaltyToday: 0,
+  rentedVehicles: [],
+  dayCostBreakdown: { ...EMPTY_COST_BREAKDOWN },
+  brokenVehicleIds: [],
 };
 
 export const useGameStore = create<GameState & GameActions>((set, get) => ({
@@ -122,6 +134,10 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       ingredients: updatedIngredients,
       funds: state.funds - totalCost,
       todayCost: state.todayCost + totalCost,
+      dayCostBreakdown: {
+        ...state.dayCostBreakdown,
+        procurement: state.dayCostBreakdown.procurement + totalCost,
+      },
     });
   },
 
@@ -194,27 +210,65 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
 
   assignRecipeToCustomer: (customerId: string, recipeIds: string[]) => {
     set(state => {
-      const existing = state.orders.filter(o => o.customerId === customerId);
-      const removed = existing.filter(o => !recipeIds.includes(o.recipeIds[0] || ''));
-      const revenue = recipeIds.reduce((sum, rid) => {
-        const recipe = state.recipes.find(r => r.id === rid);
-        const customer = state.customers.find(c => c.id === customerId);
-        return sum + (recipe ? recipe.cost * 1.5 * (customer ? customer.dailyOrderSize / 100 : 1) : 0);
-      }, 0);
+      const customer = state.customers.find(c => c.id === customerId);
+      if (!customer) return state;
 
-      const newOrders: DeliveryOrder[] = recipeIds.map((rid, idx) => ({
-        id: `order_d${state.currentDay}_${customerId}_${idx}`,
-        customerId,
-        recipeIds: [rid],
-        portions: state.customers.find(c => c.id === customerId)?.dailyOrderSize || 100,
-        status: 'pending' as const,
-        deadline: state.currentDay,
-      }));
+      const existingOrders = state.orders.filter(o => o.customerId === customerId);
+      let oldMenuCost = 0;
+      existingOrders.forEach(order => {
+        order.recipeIds.forEach(rid => {
+          const recipe = state.recipes.find(r => r.id === rid);
+          if (recipe) oldMenuCost += recipe.cost * (order.portions / 100);
+        });
+      });
+
+      const newOrders: DeliveryOrder[] = recipeIds.map((rid, idx) => {
+        const recipe = state.recipes.find(r => r.id === rid);
+        const needsColdChain = recipe
+          ? recipe.requiredIngredients.some(ri => COLD_CHAIN_CATEGORIES.includes(ri.ingredientCategory))
+          : false;
+        return {
+          id: `order_d${state.currentDay}_${customerId}_${idx}`,
+          customerId,
+          recipeIds: [rid],
+          portions: customer.dailyOrderSize,
+          status: 'pending' as const,
+          deadline: state.currentDay,
+          needsColdChain,
+        };
+      });
+
+      let newMenuCost = 0;
+      recipeIds.forEach(rid => {
+        const recipe = state.recipes.find(r => r.id === rid);
+        if (recipe) newMenuCost += recipe.cost * (customer.dailyOrderSize / 100);
+      });
 
       const otherOrders = state.orders.filter(o => o.customerId !== customerId);
+      const allOrders = [...otherOrders, ...newOrders];
+
+      let totalRevenue = 0;
+      allOrders.forEach(order => {
+        order.recipeIds.forEach(rid => {
+          const recipe = state.recipes.find(r => r.id === rid);
+          const cust = state.customers.find(c => c.id === order.customerId);
+          if (recipe && cust) {
+            totalRevenue += recipe.cost * 1.5 * (cust.dailyOrderSize / 100);
+          }
+        });
+      });
+
+      const costDelta = newMenuCost - oldMenuCost;
+
       return {
-        orders: [...otherOrders, ...newOrders],
-        todayRevenue: state.todayRevenue + revenue,
+        orders: allOrders,
+        todayRevenue: totalRevenue,
+        funds: state.funds - costDelta,
+        todayCost: state.todayCost + costDelta,
+        dayCostBreakdown: {
+          ...state.dayCostBreakdown,
+          menu: state.dayCostBreakdown.menu + costDelta,
+        },
       };
     });
   },
@@ -289,12 +343,48 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       if (!event) return state;
       const option = event.options[optionIndex];
       if (!option) return state;
+
+      const penaltyPerCustomer = state.customers.length > 0
+        ? option.satisfactionPenalty / state.customers.length
+        : 0;
+
+      const updatedCustomers = state.customers.map(c => ({
+        ...c,
+        satisfaction: Math.max(0, Math.min(100, c.satisfaction - penaltyPerCustomer)),
+      }));
+
+      const newSatisfaction = Math.max(0, Math.min(100, state.satisfaction - option.satisfactionPenalty));
+
+      let updatedVehicles = state.vehicles;
+      let updatedBrokenVehicleIds = state.brokenVehicleIds;
+
+      if (event.type === 'vehicle_breakdown') {
+        const targetVehicle = state.vehicles.find(v => v.type === 'cold_chain' && v.available);
+        if (targetVehicle) {
+          updatedVehicles = state.vehicles.map(v =>
+            v.id === targetVehicle.id ? { ...v, available: false } : v
+          );
+          if (option.timePenalty > 0) {
+            updatedBrokenVehicleIds = [...state.brokenVehicleIds, targetVehicle.id];
+          }
+        }
+      }
+
       return {
         funds: state.funds - option.costPenalty,
-        satisfaction: Math.max(0, Math.min(100, state.satisfaction - option.satisfactionPenalty)),
+        satisfaction: newSatisfaction,
         todayCost: state.todayCost + option.costPenalty,
+        dayCostBreakdown: {
+          ...state.dayCostBreakdown,
+          events: state.dayCostBreakdown.events + option.costPenalty,
+        },
+        customers: updatedCustomers,
+        satisfactionChangeToday: state.satisfactionChangeToday + option.satisfactionPenalty,
+        onTimePenaltyToday: state.onTimePenaltyToday + (option.timePenalty > 0 ? option.timePenalty : 0),
         activeEvents: state.activeEvents.filter(e => e.id !== eventId),
         completedEvents: [...state.completedEvents, { ...event, resolved: true, selectedOption: optionIndex }],
+        vehicles: updatedVehicles,
+        brokenVehicleIds: updatedBrokenVehicleIds,
       };
     });
   },
@@ -304,16 +394,16 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     const assignedOrders = state.orders.filter(o => o.vehicleId);
     const totalOrders = state.orders.length;
     const deliveredCount = assignedOrders.length;
-    const onTime = Math.round((deliveredCount / Math.max(totalOrders, 1)) * 100);
+    const baseOnTime = Math.round((deliveredCount / Math.max(totalOrders, 1)) * 100);
+    const onTime = Math.max(0, baseOnTime - state.onTimePenaltyToday * 10);
+
     const wasteIngredients = state.ingredients.filter(i => i.inspectionResult === 'failed' || !i.slotId);
     const wastePercent = Math.round((wasteIngredients.length / Math.max(state.ingredients.length, 1)) * 100);
     const profit = state.todayRevenue - state.todayCost;
 
-    const avgSatisfaction = state.customers.reduce((sum, c) => sum + c.satisfaction, 0) / state.customers.length;
-
     const summary: DaySummary = {
       day: state.currentDay,
-      satisfaction: Math.round(avgSatisfaction),
+      satisfaction: Math.round(state.satisfaction),
       wasteRate: wastePercent,
       onTimeRate: onTime,
       profit: Math.round(profit),
@@ -322,12 +412,16 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     };
 
     set({
-      satisfaction: Math.round(avgSatisfaction),
       wasteRate: wastePercent,
       onTimeRate: onTime,
       profit: state.profit + Math.round(profit),
       funds: state.funds + Math.round(state.todayRevenue),
       daySummaries: [...state.daySummaries, summary],
+      todayRevenue: 0,
+      todayCost: 0,
+      satisfactionChangeToday: 0,
+      onTimePenaltyToday: 0,
+      dayCostBreakdown: { ...EMPTY_COST_BREAKDOWN },
     });
   },
 
@@ -343,6 +437,8 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     const newIngredients = generateIngredients(nextDay, state.suppliers);
     const newEvents = generateEmergencyEvents(nextDay);
 
+    const rentedVehicleIds = new Set(state.rentedVehicles.map(v => v.id));
+
     set({
       currentDay: nextDay,
       currentPhase: 'procurement',
@@ -353,13 +449,20 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       orders: [],
       todayRevenue: 0,
       todayCost: 0,
-      vehicles: state.vehicles.map(v => ({
-        ...v,
-        usedCapacity: 0,
-        route: [],
-        assignedOrderIds: [],
-        available: true,
-      })),
+      satisfactionChangeToday: 0,
+      onTimePenaltyToday: 0,
+      dayCostBreakdown: { ...EMPTY_COST_BREAKDOWN },
+      rentedVehicles: [],
+      vehicles: state.vehicles
+        .filter(v => !rentedVehicleIds.has(v.id))
+        .map(v => ({
+          ...v,
+          usedCapacity: 0,
+          route: [],
+          assignedOrderIds: [],
+          available: !state.brokenVehicleIds.includes(v.id),
+        })),
+      brokenVehicleIds: [],
       warehouseSlots: state.warehouseSlots.map(s => ({ ...s, itemIds: [] })),
     });
   },
@@ -390,5 +493,36 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         v.id === vehicleId ? { ...v, ...updates } : v
       ),
     }));
+  },
+
+  rentVehicle: (vehicleType: 'cold_chain' | 'normal') => {
+    const state = get();
+    const rentalCost = vehicleType === 'cold_chain' ? 1500 : 800;
+    const id = `rental_d${state.currentDay}_${Date.now()}`;
+    const vehicle: Vehicle = {
+      id,
+      name: vehicleType === 'cold_chain' ? '租赁冷链车' : '租赁普通货车',
+      type: vehicleType,
+      capacity: vehicleType === 'cold_chain' ? 150 : 250,
+      usedCapacity: 0,
+      available: true,
+      route: [],
+      assignedOrderIds: [],
+    };
+    set({
+      vehicles: [...state.vehicles, vehicle],
+      rentedVehicles: [...state.rentedVehicles, vehicle],
+      funds: state.funds - rentalCost,
+      todayCost: state.todayCost + rentalCost,
+      dayCostBreakdown: {
+        ...state.dayCostBreakdown,
+        rental: state.dayCostBreakdown.rental + rentalCost,
+      },
+    });
+    return vehicle;
+  },
+
+  startChallenge: () => {
+    set(createChallengeState());
   },
 }));

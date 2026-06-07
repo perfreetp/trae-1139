@@ -8,6 +8,7 @@ import MenuPlanning from '@/pages/MenuPlanning';
 import VehicleLoading from '@/pages/VehicleLoading';
 import Emergency from '@/pages/Emergency';
 import Settlement from '@/pages/Settlement';
+import MultiWarehouseChallenge from '@/pages/MultiWarehouseChallenge';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/loading" element={<VehicleLoading />} />
           <Route path="/emergency" element={<Emergency />} />
           <Route path="/settlement" element={<Settlement />} />
+          <Route path="/challenge" element={<MultiWarehouseChallenge />} />
         </Routes>
       </GameLayout>
     </Router>

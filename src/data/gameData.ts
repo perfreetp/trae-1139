@@ -1,4 +1,4 @@
-import type { Supplier, Recipe, Customer, Vehicle, WarehouseSlot, EmergencyEvent, Ingredient, Phase } from '@/types';
+import type { Supplier, Recipe, Customer, Vehicle, WarehouseSlot, EmergencyEvent, Ingredient, Phase, GameState } from '@/types';
 
 const SUPPLIERS: Supplier[] = [
   { id: 's1', name: '金源粮油', category: 'grain_oil', pricePerUnit: 8, deliveryDays: 1, reputation: 5, available: true },
@@ -186,6 +186,7 @@ export function createInitialState() {
     currentPhase: 'procurement' as Phase,
     completedPhases: [] as Phase[],
     multiWarehouseUnlocked: false,
+    challengeMode: false,
     suppliers,
     ingredients,
     warehouseSlots: WAREHOUSE_SLOTS.map(s => ({ ...s, itemIds: [] })),
@@ -198,7 +199,218 @@ export function createInitialState() {
     daySummaries: [],
     todayRevenue: 0,
     todayCost: 0,
+    satisfactionChangeToday: 0,
+    onTimePenaltyToday: 0,
+    rentedVehicles: [],
+    dayCostBreakdown: { procurement: 0, menu: 0, events: 0, rental: 0 },
+    brokenVehicleIds: [],
   };
 }
 
-export { SUPPLIERS, RECIPES, CUSTOMERS, VEHICLES, WAREHOUSE_SLOTS, generateIngredients, generateEmergencyEvents };
+const DISTANCE_MATRIX: Record<string, Record<string, number>> = {
+  '中心厨房': {
+    '城东区-学府路12号': 8,
+    '城东区-育才大道88号': 10,
+    '城中区-健康路56号': 5,
+    '城西区-医疗街33号': 14,
+    '高新区-创新大道100号': 12,
+  },
+  '城东区-学府路12号': {
+    '中心厨房': 8,
+    '城东区-育才大道88号': 4,
+    '城中区-健康路56号': 7,
+    '城西区-医疗街33号': 16,
+    '高新区-创新大道100号': 14,
+  },
+  '城东区-育才大道88号': {
+    '中心厨房': 10,
+    '城东区-学府路12号': 4,
+    '城中区-健康路56号': 9,
+    '城西区-医疗街33号': 18,
+    '高新区-创新大道100号': 16,
+  },
+  '城中区-健康路56号': {
+    '中心厨房': 5,
+    '城东区-学府路12号': 7,
+    '城东区-育才大道88号': 9,
+    '城西区-医疗街33号': 9,
+    '高新区-创新大道100号': 10,
+  },
+  '城西区-医疗街33号': {
+    '中心厨房': 14,
+    '城东区-学府路12号': 16,
+    '城东区-育才大道88号': 18,
+    '城中区-健康路56号': 9,
+    '高新区-创新大道100号': 20,
+  },
+  '高新区-创新大道100号': {
+    '中心厨房': 12,
+    '城东区-学府路12号': 14,
+    '城东区-育才大道88号': 16,
+    '城中区-健康路56号': 10,
+    '城西区-医疗街33号': 20,
+  },
+};
+
+const CHALLENGE_WAREHOUSE_SLOTS: WarehouseSlot[] = [
+  { id: 'cw1', zone: 'cold', capacity: 40, itemIds: [], label: '城东中央仓-冷藏区' },
+  { id: 'cw2', zone: 'frozen', capacity: 20, itemIds: [], label: '城东中央仓-冷冻区' },
+  { id: 'cw3', zone: 'ambient', capacity: 60, itemIds: [], label: '城东中央仓-常温区' },
+  { id: 'cw4', zone: 'cold', capacity: 50, itemIds: [], label: '城西冷链仓-冷藏区' },
+  { id: 'cw5', zone: 'frozen', capacity: 30, itemIds: [], label: '城西冷链仓-冷冻区' },
+  { id: 'cw6', zone: 'ambient', capacity: 30, itemIds: [], label: '城西冷链仓-常温区' },
+];
+
+const CHALLENGE_VEHICLES: Vehicle[] = [
+  { id: 'cv1', name: '城东冷链车A', type: 'cold_chain', capacity: 180, usedCapacity: 0, available: true, route: [], assignedOrderIds: [], originWarehouse: 'cw1' },
+  { id: 'cv2', name: '城东冷链车B', type: 'cold_chain', capacity: 150, usedCapacity: 0, available: true, route: [], assignedOrderIds: [], originWarehouse: 'cw1' },
+  { id: 'cv3', name: '城东普通货车', type: 'normal', capacity: 280, usedCapacity: 0, available: true, route: [], assignedOrderIds: [], originWarehouse: 'cw1' },
+  { id: 'cv4', name: '城西冷链车A', type: 'cold_chain', capacity: 200, usedCapacity: 0, available: true, route: [], assignedOrderIds: [], originWarehouse: 'cw4' },
+  { id: 'cv5', name: '城西冷链车B', type: 'cold_chain', capacity: 160, usedCapacity: 0, available: true, route: [], assignedOrderIds: [], originWarehouse: 'cw4' },
+  { id: 'cv6', name: '城西普通货车', type: 'normal', capacity: 250, usedCapacity: 0, available: true, route: [], assignedOrderIds: [], originWarehouse: 'cw4' },
+];
+
+const CHALLENGE_CUSTOMERS: Customer[] = [
+  { id: 'cc1', name: '阳光小学', type: 'school', satisfaction: 80, location: '城东区-学府路12号', dailyOrderSize: 300 },
+  { id: 'cc2', name: '育才中学', type: 'school', satisfaction: 75, location: '城东区-育才大道88号', dailyOrderSize: 400 },
+  { id: 'cc3', name: '启明小学', type: 'school', satisfaction: 78, location: '城西区-文教路22号', dailyOrderSize: 250 },
+  { id: 'cc4', name: '市中心医院', type: 'hospital', satisfaction: 85, location: '城中区-健康路56号', dailyOrderSize: 250 },
+  { id: 'cc5', name: '第一人民医院', type: 'hospital', satisfaction: 80, location: '城西区-医疗街33号', dailyOrderSize: 200 },
+  { id: 'cc6', name: '科技园区食堂', type: 'enterprise', satisfaction: 70, location: '高新区-创新大道100号', dailyOrderSize: 500 },
+  { id: 'cc7', name: '远航集团食堂', type: 'enterprise', satisfaction: 65, location: '远郊区-临港大道1号', dailyOrderSize: 350 },
+];
+
+const CHALLENGE_DISTANCE_MATRIX: Record<string, Record<string, number>> = {
+  '城东中央仓': {
+    '城东区-学府路12号': 5,
+    '城东区-育才大道88号': 7,
+    '城西区-文教路22号': 24,
+    '城中区-健康路56号': 10,
+    '城西区-医疗街33号': 22,
+    '高新区-创新大道100号': 14,
+    '远郊区-临港大道1号': 40,
+    '城西冷链仓': 18,
+  },
+  '城西冷链仓': {
+    '城东区-学府路12号': 20,
+    '城东区-育才大道88号': 22,
+    '城西区-文教路22号': 6,
+    '城中区-健康路56号': 12,
+    '城西区-医疗街33号': 5,
+    '高新区-创新大道100号': 26,
+    '远郊区-临港大道1号': 38,
+    '城东中央仓': 18,
+  },
+  '城东区-学府路12号': {
+    '城东中央仓': 5,
+    '城西冷链仓': 20,
+  },
+  '城东区-育才大道88号': {
+    '城东中央仓': 7,
+    '城西冷链仓': 22,
+  },
+  '城西区-文教路22号': {
+    '城东中央仓': 24,
+    '城西冷链仓': 6,
+  },
+  '城中区-健康路56号': {
+    '城东中央仓': 10,
+    '城西冷链仓': 12,
+  },
+  '城西区-医疗街33号': {
+    '城东中央仓': 22,
+    '城西冷链仓': 5,
+  },
+  '高新区-创新大道100号': {
+    '城东中央仓': 14,
+    '城西冷链仓': 26,
+  },
+  '远郊区-临港大道1号': {
+    '城东中央仓': 40,
+    '城西冷链仓': 38,
+  },
+};
+
+function generateChallengeIngredients(day: number, suppliers: Supplier[]): Ingredient[] {
+  const qualityVariance = Math.max(0.5, 1 - day * 0.05);
+  const baseIngredients: Omit<Ingredient, 'id' | 'receivedDay' | 'quality' | 'inspected' | 'inspectionResult' | 'unitPrice' | 'supplierId' | 'slotId'>[] = [
+    { name: '大米', category: 'rice', expiryDays: 90, quantity: 80, storageType: 'ambient' },
+    { name: '面粉', category: 'flour', expiryDays: 60, quantity: 60, storageType: 'ambient' },
+    { name: '鸡蛋', category: 'egg', expiryDays: 15, quantity: 40, storageType: 'cold' },
+    { name: '番茄', category: 'tomato', expiryDays: 7, quantity: 35, storageType: 'cold' },
+    { name: '土豆', category: 'potato', expiryDays: 14, quantity: 50, storageType: 'ambient' },
+    { name: '蔬菜混合', category: 'vegetable', expiryDays: 5, quantity: 70, storageType: 'cold' },
+    { name: '鸡肉', category: 'chicken', expiryDays: 3, quantity: 45, storageType: 'cold' },
+    { name: '猪肉', category: 'pork', expiryDays: 4, quantity: 35, storageType: 'cold' },
+    { name: '鲈鱼', category: 'fish', expiryDays: 2, quantity: 25, storageType: 'cold' },
+    { name: '虾仁', category: 'seafood', expiryDays: 2, quantity: 20, storageType: 'frozen' },
+    { name: '豆腐', category: 'tofu', expiryDays: 3, quantity: 35, storageType: 'cold' },
+    { name: '调味料套装', category: 'seasoning', expiryDays: 180, quantity: 50, storageType: 'ambient' },
+  ];
+
+  return baseIngredients.map((ing, idx) => {
+    const categorySupplierMap: Record<string, string> = {
+      rice: 'grain_oil', flour: 'grain_oil', egg: 'grain_oil',
+      tomato: 'vegetable_fruit', potato: 'vegetable_fruit', vegetable: 'vegetable_fruit',
+      chicken: 'meat', pork: 'meat', fish: 'seafood', seafood: 'seafood',
+      tofu: 'vegetable_fruit', seasoning: 'seasoning',
+    };
+    const supplierCategory = categorySupplierMap[ing.category] || 'seasoning';
+    const matchedSupplier = suppliers.find(s => s.category === supplierCategory && s.available) || suppliers[0];
+    const quality = Math.round((0.6 + Math.random() * 0.4 * qualityVariance) * 100) / 100;
+
+    return {
+      ...ing,
+      id: `cing_d${day}_${idx}`,
+      receivedDay: day,
+      quality,
+      inspected: false,
+      inspectionResult: 'pending' as const,
+      unitPrice: matchedSupplier.pricePerUnit * (1 + day * 0.02),
+      supplierId: matchedSupplier.id,
+    };
+  });
+}
+
+export function createChallengeState(): GameState {
+  const day = 1;
+  const suppliers = SUPPLIERS.map(s => ({ ...s }));
+  const ingredients = generateChallengeIngredients(day, suppliers);
+  const events = generateEmergencyEvents(day);
+
+  return {
+    started: true,
+    gameOver: false,
+    gameWon: false,
+    currentDay: day,
+    totalDays: 5,
+    funds: 80000,
+    satisfaction: 80,
+    wasteRate: 5,
+    onTimeRate: 95,
+    profit: 0,
+    currentPhase: 'procurement' as Phase,
+    completedPhases: [] as Phase[],
+    multiWarehouseUnlocked: true,
+    challengeMode: true,
+    suppliers,
+    ingredients,
+    warehouseSlots: CHALLENGE_WAREHOUSE_SLOTS.map(s => ({ ...s, itemIds: [] })),
+    recipes: RECIPES.map(r => ({ ...r })),
+    vehicles: CHALLENGE_VEHICLES.map(v => ({ ...v, usedCapacity: 0, route: [], assignedOrderIds: [] })),
+    orders: [],
+    customers: CHALLENGE_CUSTOMERS.map(c => ({ ...c })),
+    activeEvents: events,
+    completedEvents: [],
+    daySummaries: [],
+    todayRevenue: 0,
+    todayCost: 0,
+    satisfactionChangeToday: 0,
+    onTimePenaltyToday: 0,
+    rentedVehicles: [],
+    dayCostBreakdown: { procurement: 0, menu: 0, events: 0, rental: 0 },
+    brokenVehicleIds: [],
+  };
+}
+
+export { SUPPLIERS, RECIPES, CUSTOMERS, VEHICLES, WAREHOUSE_SLOTS, generateIngredients, generateEmergencyEvents, DISTANCE_MATRIX, CHALLENGE_DISTANCE_MATRIX };
