@@ -6,7 +6,7 @@ import {
   BarChart3, TrendingUp, DollarSign, Users,
   Package, Trophy, Skull, ArrowRight,
   CheckCircle, AlertTriangle, Sparkles,
-  ShoppingCart, UtensilsCrossed, Truck,
+  ShoppingCart, UtensilsCrossed, Truck, ArrowLeftRight,
 } from 'lucide-react';
 
 function metricColor(value: number): string {
@@ -179,6 +179,17 @@ export default function Settlement() {
                   <div className="font-mono-data text-sm font-bold text-slate-200">¥{lastSettlement.costBreakdown.rental.toLocaleString()}</div>
                 </div>
               </div>
+              {lastSettlement.costBreakdown.transfer > 0 && (
+                <div className="flex items-center gap-3 bg-[#14142a] rounded-lg p-3">
+                  <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
+                    <ArrowLeftRight size={16} className="text-cyan-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-xs text-slate-500">跨仓调拨</div>
+                    <div className="font-mono-data text-sm font-bold text-amber-400">¥{lastSettlement.costBreakdown.transfer.toLocaleString()}</div>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="border-t border-[#2a2a45] pt-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -383,14 +394,14 @@ export default function Settlement() {
           <div className="flex items-center gap-4 mb-4">
             <div className="flex items-center gap-2 bg-[#14142a] rounded-lg px-4 py-2">
               <span className="text-xs text-slate-500">满意度变化</span>
-              <span className={`font-mono-data text-sm font-bold ${(lastSettlement?.satisfactionChange ?? 0) <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                {(lastSettlement?.satisfactionChange ?? 0) <= 0 ? '' : '+'}{lastSettlement?.satisfactionChange ?? 0}
+              <span className={`font-mono-data text-sm font-bold ${(lastSettlement?.satisfactionChange ?? 0) > 0 ? 'text-red-400' : (lastSettlement?.satisfactionChange ?? 0) < 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                {(lastSettlement?.satisfactionChange ?? 0) > 0 ? `扣${lastSettlement!.satisfactionChange}` : (lastSettlement?.satisfactionChange ?? 0) < 0 ? `+${Math.abs(lastSettlement!.satisfactionChange)}` : '无变化'}
               </span>
             </div>
             <div className="flex items-center gap-2 bg-[#14142a] rounded-lg px-4 py-2">
               <span className="text-xs text-slate-500">准时惩罚</span>
               <span className={`font-mono-data text-sm font-bold ${(lastSettlement?.onTimePenalty ?? 0) > 0 ? 'text-red-400' : 'text-slate-400'}`}>
-                {(lastSettlement?.onTimePenalty ?? 0) > 0 ? `-${lastSettlement.onTimePenalty * 10}%` : '无'}
+                {(lastSettlement?.onTimePenalty ?? 0) > 0 ? `扣${lastSettlement!.onTimePenalty * 10}%` : '无'}
               </span>
             </div>
           </div>
@@ -409,12 +420,22 @@ export default function Settlement() {
                       </div>
                       <p className="text-xs text-slate-400 mb-2">{ev.description}</p>
                       {ev.selectedOption !== undefined && ev.options[ev.selectedOption] && (
-                        <div className="text-xs text-slate-500 flex items-center gap-2">
-                          <CheckCircle size={12} className="text-emerald-400" />
-                          <span>选择方案：{ev.options[ev.selectedOption].label}</span>
-                          <span className="text-red-400/70">
-                            （成本 -¥{ev.options[ev.selectedOption].costPenalty}）
-                          </span>
+                        <div className="text-xs space-y-1">
+                          <div className="flex items-center gap-2 text-slate-500">
+                            <CheckCircle size={12} className="text-emerald-400" />
+                            <span>选择方案：{ev.options[ev.selectedOption].label}</span>
+                          </div>
+                          <div className="flex items-center gap-3 ml-5">
+                            {ev.options[ev.selectedOption].costPenalty > 0 && (
+                              <span className="text-red-400/80">成本扣 ¥{ev.options[ev.selectedOption].costPenalty.toLocaleString()}</span>
+                            )}
+                            {ev.options[ev.selectedOption].satisfactionPenalty > 0 && (
+                              <span className="text-red-400/80">满意度扣 {ev.options[ev.selectedOption].satisfactionPenalty}</span>
+                            )}
+                            {ev.options[ev.selectedOption].timePenalty > 0 && (
+                              <span className="text-amber-400/80">准点惩罚 {ev.options[ev.selectedOption].timePenalty}</span>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

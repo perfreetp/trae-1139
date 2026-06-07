@@ -143,6 +143,7 @@ export interface CostBreakdown {
   menu: number;
   events: number;
   rental: number;
+  transfer: number;
 }
 
 export interface SettlementSnapshot {

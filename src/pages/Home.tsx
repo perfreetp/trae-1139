@@ -389,41 +389,58 @@ function DashboardPage() {
                         <tr className="border-b border-[#2a2a45]/30">
                           <td colSpan={8} className="px-6 py-3 bg-[#161628]">
                             <div className="space-y-3">
-                              <div>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                                 <span className="text-xs text-slate-500">成本明细：</span>
-                                <span className="text-xs font-mono-data text-slate-300 ml-1">
+                                <span className="text-xs font-mono-data text-slate-300">
                                   采购 ¥{s.costBreakdown.procurement.toLocaleString()}
                                 </span>
-                                <span className="text-slate-600 mx-1">/</span>
+                                <span className="text-slate-600">/</span>
                                 <span className="text-xs font-mono-data text-slate-300">
                                   排产 ¥{s.costBreakdown.menu.toLocaleString()}
                                 </span>
-                                <span className="text-slate-600 mx-1">/</span>
+                                <span className="text-slate-600">/</span>
                                 <span className="text-xs font-mono-data text-slate-300">
                                   事件 ¥{s.costBreakdown.events.toLocaleString()}
                                 </span>
-                                <span className="text-slate-600 mx-1">/</span>
+                                <span className="text-slate-600">/</span>
                                 <span className="text-xs font-mono-data text-slate-300">
                                   租车 ¥{s.costBreakdown.rental.toLocaleString()}
                                 </span>
+                                {s.costBreakdown.transfer > 0 && (
+                                  <>
+                                    <span className="text-slate-600">/</span>
+                                    <span className="text-xs font-mono-data text-amber-400">
+                                      调拨 ¥{s.costBreakdown.transfer.toLocaleString()}
+                                    </span>
+                                  </>
+                                )}
                               </div>
 
                               {s.deliveryResults.length > 0 && (
                                 <div>
-                                  <span className="text-xs text-slate-500">配送结果：</span>
-                                  <div className="flex flex-wrap gap-2 mt-1">
+                                  <span className="text-xs text-slate-500 mb-1 block">配送结果：</span>
+                                  <div className="space-y-1">
                                     {s.deliveryResults.map(r => (
-                                      <span
+                                      <div
                                         key={r.customerId}
-                                        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
-                                          r.onTime
-                                            ? 'bg-emerald-500/10 text-emerald-400'
-                                            : 'bg-red-500/10 text-red-400'
+                                        className={`text-xs flex items-center gap-2 px-2 py-1 rounded ${
+                                          r.onTime ? 'bg-emerald-500/5' : 'bg-red-500/5'
                                         }`}
                                       >
-                                        {r.customerName}
-                                        {r.onTime ? ' 准点' : ' 延误'}
-                                      </span>
+                                        <span className={`font-medium ${r.onTime ? 'text-emerald-400' : 'text-red-400'}`}>
+                                          {r.customerName} {r.onTime ? '准点' : '延误'}
+                                        </span>
+                                        <span className="text-slate-500">{r.distance}km</span>
+                                        {r.delayReason && (
+                                          <span className="text-red-400/70">{r.delayReason}</span>
+                                        )}
+                                        {r.crossWarehouse && (
+                                          <span className="text-amber-400/80 px-1 bg-amber-500/10 rounded">跨仓</span>
+                                        )}
+                                        {r.isRented && (
+                                          <span className="text-amber-400/80 px-1 bg-amber-500/10 rounded">租赁</span>
+                                        )}
+                                      </div>
                                     ))}
                                   </div>
                                 </div>
@@ -432,14 +449,14 @@ function DashboardPage() {
                               <div className="flex items-center gap-4">
                                 <span className="text-xs text-slate-500">
                                   满意度变化：
-                                  <span className={`font-mono-data ml-1 ${s.satisfactionChange <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                    {s.satisfactionChange <= 0 ? '' : '+'}{s.satisfactionChange}%
+                                  <span className={`font-mono-data ml-1 ${s.satisfactionChange > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                                    {s.satisfactionChange > 0 ? `扣${s.satisfactionChange}` : s.satisfactionChange < 0 ? `+${Math.abs(s.satisfactionChange)}` : '无变化'}
                                   </span>
                                 </span>
                                 {s.onTimePenalty > 0 && (
                                   <span className="text-xs text-slate-500">
                                     准点惩罚：
-                                    <span className="font-mono-data text-red-400 ml-1">{s.onTimePenalty}</span>
+                                    <span className="font-mono-data text-red-400 ml-1">扣{s.onTimePenalty * 10}%</span>
                                   </span>
                                 )}
                               </div>

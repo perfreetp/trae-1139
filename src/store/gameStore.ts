@@ -4,7 +4,7 @@ import { createInitialState, generateIngredients, generateEmergencyEvents, creat
 
 const COLD_CHAIN_CATEGORIES = ['egg', 'tomato', 'vegetable', 'chicken', 'pork', 'fish', 'seafood', 'tofu'];
 
-const EMPTY_COST_BREAKDOWN: CostBreakdown = { procurement: 0, menu: 0, events: 0, rental: 0 };
+const EMPTY_COST_BREAKDOWN: CostBreakdown = { procurement: 0, menu: 0, events: 0, rental: 0, transfer: 0 };
 
 const WAREHOUSE_SLOT_GROUPS: Record<string, string> = {
   cw1: '城东中央仓', cw2: '城东中央仓', cw3: '城东中央仓',
@@ -547,13 +547,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       };
     });
 
-    const consecutivePenaltyTotal = updatedCustomers.reduce((sum, c) => {
-      const orig = state.customers.find(oc => oc.id === c.id);
-      return sum + (orig ? orig.satisfaction - c.satisfaction : 0);
-    }, 0) - state.satisfactionChangeToday;
-
-    const avgSatisfaction = Math.round(updatedCustomers.reduce((s, c) => s + c.satisfaction, 0) / Math.max(updatedCustomers.length, 1));
-    const finalSatisfaction = Math.max(0, Math.min(100, Math.round(state.satisfaction - Math.max(0, consecutivePenaltyTotal))));
+    const finalSatisfaction = Math.round(updatedCustomers.reduce((s, c) => s + c.satisfaction, 0) / Math.max(updatedCustomers.length, 1));
 
     const wasteIngredients = state.ingredients.filter(i => i.inspectionResult === 'failed' || !i.slotId);
     const wastePercent = Math.round((wasteIngredients.length / Math.max(state.ingredients.length, 1)) * 100);
@@ -734,7 +728,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
           todayCost: state.todayCost + transferCost,
           dayCostBreakdown: {
             ...state.dayCostBreakdown,
-            events: state.dayCostBreakdown.events + transferCost,
+            transfer: state.dayCostBreakdown.transfer + transferCost,
           },
           transferCostToday: state.transferCostToday + transferCost,
         } : {}),

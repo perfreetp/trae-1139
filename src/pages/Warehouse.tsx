@@ -34,10 +34,17 @@ const STORAGE_TYPE_BADGE: Record<StorageType, { bg: string; text: string; label:
   ambient: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: '常温' },
 };
 
+const WAREHOUSE_SLOT_GROUPS: Record<string, string> = {
+  cw1: '城东中央仓', cw2: '城东中央仓', cw3: '城东中央仓',
+  cw4: '城西冷链仓', cw5: '城西冷链仓', cw6: '城西冷链仓',
+};
+
 export default function WarehousePage() {
-  const { ingredients, warehouseSlots, assignToSlot, removeFromSlot, nextPhase, currentDay, totalDays } = useGameStore();
+  const { ingredients, warehouseSlots, assignToSlot, removeFromSlot, transferIngredient, nextPhase, currentDay, totalDays, challengeMode, funds } = useGameStore();
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [crossWarehouseTarget, setCrossWarehouseTarget] = useState<{ ingredientId: string; fromSlotId: string; toSlotId: string } | null>(null);
+  const [lastSlotMap, setLastSlotMap] = useState<Record<string, string>>({});
   const dropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
@@ -62,11 +69,36 @@ export default function WarehousePage() {
     warehouseSlots.filter(s => s.zone === storageType);
 
   const handleAssign = (ingredientId: string, slotId: string) => {
+    const ingredient = ingredients.find(i => i.id === ingredientId);
+    if (challengeMode) {
+      const fromSlotId = ingredient?.slotId || lastSlotMap[ingredientId];
+      if (fromSlotId) {
+        const fromGroup = WAREHOUSE_SLOT_GROUPS[fromSlotId];
+        const toGroup = WAREHOUSE_SLOT_GROUPS[slotId];
+        if (fromGroup && toGroup && fromGroup !== toGroup) {
+          setCrossWarehouseTarget({ ingredientId, fromSlotId, toSlotId: slotId });
+          setOpenDropdownId(null);
+          return;
+        }
+      }
+    }
     assignToSlot(ingredientId, slotId);
+    delete lastSlotMap[ingredientId];
     setOpenDropdownId(null);
   };
 
+  const confirmCrossWarehouse = () => {
+    if (crossWarehouseTarget) {
+      transferIngredient(crossWarehouseTarget.ingredientId, crossWarehouseTarget.fromSlotId, crossWarehouseTarget.toSlotId);
+      setCrossWarehouseTarget(null);
+    }
+  };
+
   const handleRemove = (ingredientId: string) => {
+    const ingredient = ingredients.find(i => i.id === ingredientId);
+    if (challengeMode && ingredient?.slotId) {
+      setLastSlotMap(prev => ({ ...prev, [ingredientId]: ingredient.slotId! }));
+    }
     removeFromSlot(ingredientId);
   };
 
@@ -108,6 +140,38 @@ export default function WarehousePage() {
         <AlertCircle size={16} className="flex-shrink-0" />
         <span>FIFO 先进先出原则：优先使用入库早的原料，避免过期浪费</span>
       </div>
+
+      {crossWarehouseTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="card max-w-sm w-full mx-4 p-6 text-center animate-slide-in border-2 border-amber-500/30">
+            <AlertCircle size={40} className="mx-auto text-amber-400 mb-4" />
+            <h3 className="text-lg font-bold text-amber-400 mb-2">跨仓调拨确认</h3>
+            <p className="text-sm text-slate-400 mb-4">
+              此操作将原料从 <span className="text-slate-200">{WAREHOUSE_SLOT_GROUPS[crossWarehouseTarget.fromSlotId]}</span> 调拨到{' '}
+              <span className="text-slate-200">{WAREHOUSE_SLOT_GROUPS[crossWarehouseTarget.toSlotId]}</span>，
+              需支付跨仓调拨费 <span className="text-amber-400 font-bold">¥200</span>
+            </p>
+            {funds < 200 && (
+              <p className="text-xs text-red-400 mb-3">资金不足，无法支付调拨费</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setCrossWarehouseTarget(null)}
+                className="btn-secondary flex-1"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmCrossWarehouse}
+                disabled={funds < 200}
+                className={cn('btn-primary flex-1', funds < 200 && 'opacity-40 cursor-not-allowed')}
+              >
+                确认调拨 ¥200
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-[1fr_380px] gap-5 min-h-0">
         <div className="space-y-4 overflow-y-auto">
